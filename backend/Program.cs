@@ -1,6 +1,12 @@
-using StockSync.Models;
+using StockSync.Data;
+using StockSync.Repositories;
+using StockSync.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Database path & connection string
+var dbPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "database", "stocksync.db"));
+var connectionString = $"Data Source={dbPath}";
 
 // Add services to the container.
 builder.Services.AddCors(options =>
@@ -13,22 +19,53 @@ builder.Services.AddCors(options =>
     });
 });
 
+builder.Services.AddSingleton(new DatabaseInitializer(connectionString, dbPath));
+builder.Services.AddScoped<ISourceInventoryRepository>(_ => new SourceInventoryRepository(connectionString));
+builder.Services.AddScoped<IDestinationInventoryRepository>(_ => new DestinationInventoryRepository(connectionString));
+builder.Services.AddScoped<ISyncHistoryRepository>(_ => new SyncHistoryRepository(connectionString));
+builder.Services.AddScoped<IInventorySyncService, InventorySyncService>();
+
 var app = builder.Build();
 
 app.UseCors();
 
-// In-memory source inventory for Phase 1 verification
-var sourceInventory = new List<InventoryItem>
+// Initialize database schema and seed data
+using (var scope = app.Services.CreateScope())
 {
-    new() { Id = 1, ProductName = "Blue Shoes", Quantity = 20, UpdatedAt = DateTime.UtcNow },
-    new() { Id = 2, ProductName = "Black Shirt", Quantity = 15, UpdatedAt = DateTime.UtcNow },
-    new() { Id = 3, ProductName = "Red Cap", Quantity = 8, UpdatedAt = DateTime.UtcNow }
-};
+    var initializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
+    initializer.Initialize();
+}
 
-// Health/Welcome endpoint
+// Health endpoints
 app.MapGet("/", () => Results.Ok(new { message = "StockSync API is running", status = "Healthy" }));
+app.MapGet("/health", () => Results.Ok(new { message = "StockSync API is running", status = "Healthy" }));
 
 // Source inventory endpoint
-app.MapGet("/source/inventory", () => Results.Ok(sourceInventory));
+app.MapGet("/source/inventory", async (ISourceInventoryRepository repository) =>
+{
+    var items = await repository.GetAllAsync();
+    return Results.Ok(items);
+});
+
+// Destination inventory endpoint
+app.MapGet("/destination/inventory", async (IDestinationInventoryRepository repository) =>
+{
+    var items = await repository.GetAllAsync();
+    return Results.Ok(items);
+});
+
+// Sync history endpoint
+app.MapGet("/sync/history", async (ISyncHistoryRepository repository) =>
+{
+    var history = await repository.GetAllAsync();
+    return Results.Ok(history);
+});
+
+// Synchronization endpoint
+app.MapPost("/api/sync", async (IInventorySyncService syncService, CancellationToken ct) =>
+{
+    var result = await syncService.SynchronizeAsync(ct);
+    return result.Success ? Results.Ok(result) : Results.BadRequest(result);
+});
 
 app.Run();
