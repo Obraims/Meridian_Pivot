@@ -53,6 +53,9 @@ public class DatabaseInitializer
             command.ExecuteNonQuery();
         }
 
+        // Schema migration helpers
+        EnsureColumnExists(connection, "webhook_events", "attendee_id", "TEXT NOT NULL DEFAULT ''");
+
         // Seed default attendees if attendees table is empty
         using (var checkCmd = connection.CreateCommand())
         {
@@ -93,6 +96,30 @@ public class DatabaseInitializer
 
                 transaction.Commit();
             }
+        }
+    }
+
+    private static void EnsureColumnExists(SqliteConnection connection, string table, string column, string columnDef)
+    {
+        using var pragmaCmd = connection.CreateCommand();
+        pragmaCmd.CommandText = $"PRAGMA table_info({table});";
+        using var reader = pragmaCmd.ExecuteReader();
+        var exists = false;
+        while (reader.Read())
+        {
+            if (reader.GetString(1).Equals(column, StringComparison.OrdinalIgnoreCase))
+            {
+                exists = true;
+                break;
+            }
+        }
+        reader.Close();
+
+        if (!exists)
+        {
+            using var alterCmd = connection.CreateCommand();
+            alterCmd.CommandText = $"ALTER TABLE {table} ADD COLUMN {column} {columnDef};";
+            alterCmd.ExecuteNonQuery();
         }
     }
 }
