@@ -36,22 +36,52 @@ Webhook Idempotency (SQLite webhook_events) ──(State: CHECKED_IN)──> SQL
 
 ---
 
-## Running the Application
+## Deployment & Running Options
 
-### 1. Prerequisites
-- [.NET 10 SDK](https://dotnet.microsoft.com/)
-- [RabbitMQ Broker](https://www.rabbitmq.com/) running on `localhost:5672` (e.g. via Docker: `docker run -d --name meridian-rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management`)
+### Option 1: Local Development / Evaluation (Recommended for Live Demo)
 
-### 2. Run Tests
+#### Step 1: Start RabbitMQ Broker
+```powershell
+docker run -d --name meridian-rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+```
+
+#### Step 2: Run Automated Tests
 ```powershell
 cd tests
 dotnet test
 ```
 
-### 3. Run Application
+#### Step 3: Launch ASP.NET Core Application
 ```powershell
 cd backend
 dotnet run --urls="http://127.0.0.1:5000"
 ```
 
-Open your browser at `http://127.0.0.1:5000/` to use the Kiosk UI!
+Open your browser at `http://127.0.0.1:5000/` to access the live Kiosk UI!
+
+---
+
+### Option 2: Single-Command Containerized Deployment (`docker compose`)
+
+To run the entire system (RabbitMQ + Backend + SQLite + Frontend) in isolated Docker containers:
+
+```powershell
+docker compose up --build
+```
+- **Kiosk UI**: `http://localhost:5000/`
+- **RabbitMQ Management Portal**: `http://localhost:15672/` (Username: `guest`, Password: `guest`)
+
+To stop and remove containers:
+```powershell
+docker compose down
+```
+
+---
+
+### Option 3: Standalone Binary Release (`dotnet publish`)
+
+To package a standalone executable for deployment without source files:
+```powershell
+dotnet publish backend/StockSync.csproj -c Release -o ./publish
+```
+Then run the generated `publish/StockSync.exe` (Windows) or `publish/StockSync` (Linux/macOS).

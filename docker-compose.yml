@@ -1,0 +1,32 @@
+﻿services:
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: meridian-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  kiosk-app:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: solstice-kiosk-app
+    ports:
+      - "5000:5000"
+    environment:
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Port=5672
+      - RabbitMQ__QueueName=badge-print-requests
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./database:/database
