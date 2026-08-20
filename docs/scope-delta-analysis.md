@@ -2,14 +2,14 @@
 
 ## 1. Executive Summary
 
-This document details the architectural and functional delta between the original synchronous badge-printer integration (Day 3) and the asynchronous message-driven architecture (Day 4 Pivot) for Solstice Events Co.
+This document details the architectural and functional delta between the original synchronous badge-printer integration (Day 3) and the asynchronous message-driven architecture (Day 4 Pivot) for Solstice Events Co., satisfying the requirements for **Assignment 2: Mid-Sprint Change Log & Refactored Deliverable**.
 
 ---
 
-## 2. Detailed Scope Delta
+## 2. Detailed Scope Delta (Dropped / Modified / Added / Preserved)
 
 ### DROPPED
-- **Synchronous Vendor REST Calls**: The kiosk backend no longer blocks or waits for the badge printer vendor during the initial check-in scan.
+- **Synchronous Vendor REST Calls**: The kiosk backend no longer blocks or waits for the badge printer vendor HTTP response during the initial check-in scan.
 - **Immediate State Transition to CHECKED_IN**: Check-in no longer immediately switches to `CHECKED_IN` upon HTTP request return.
 - **Obsolete Inventory Domain Logic**: Retail inventory models, warehouse sync tables, and polling schedulers from prior project phases were completely retired.
 
@@ -35,7 +35,21 @@ This document details the architectural and functional delta between the origina
 
 ---
 
-## 3. Regression Verification: Duplicate-Scan Protection
+## 3. Reprioritized Day 4–5 Backlog
+
+| Backlog Item | Priority | Status | Rationale |
+| :--- | :---: | :---: | :--- |
+| **RabbitMQ Queue Infrastructure** | P0 | **DONE** | Required to replace deprecated synchronous HTTP calls with persistent queueing. |
+| **3-State Machine Transition (`NOT_CHECKED_IN` $\rightarrow$ `PENDING` $\rightarrow$ `CHECKED_IN`)** | P0 | **DONE** | Core domain requirement for asynchronous decoupled lifecycle. |
+| **Mock Printer Background Worker** | P0 | **DONE** | Simulates hardware print delay and emits webhook callback. |
+| **Webhook Endpoint & SQLite Idempotency** | P0 | **DONE** | Ensures duplicate or out-of-order webhooks cannot corrupt state or trigger duplicate prints. |
+| **Duplicate-Scan Regression Verification** | P0 | **DONE** | Verified both `PENDING` and `CHECKED_IN` duplicate scans are blocked. |
+| **Kiosk UI Real-Time Feedback** | P1 | **DONE** | Live UI reflecting `Ready to Check In` $\rightarrow$ `⏳ Printing...` $\rightarrow$ `✓ Checked In`. |
+| **Comprehensive Test Suite** | P1 | **DONE** | 9 unit and integration tests covering all state transitions and RabbitMQ integration. |
+
+---
+
+## 4. Regression Verification: Duplicate-Scan Protection
 
 | Scenario | Pre-Pivot Behavior | Post-Pivot Behavior | Status |
 | :--- | :--- | :--- | :---: |
@@ -46,7 +60,7 @@ This document details the architectural and functional delta between the origina
 
 ---
 
-## 4. Trade-off Analysis
+## 5. Architectural Trade-Off Analysis
 
 1. **Decoupled Throughput vs Eventual Consistency**:
    - *Gain*: Kiosks respond in $< 20\text{ms}$ rather than waiting seconds for printer hardware, dramatically increasing check-in line throughput.
