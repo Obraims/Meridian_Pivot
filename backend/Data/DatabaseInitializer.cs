@@ -1,6 +1,7 @@
-namespace StockSync.Data;
+﻿namespace StockSync.Data;
 
 using Microsoft.Data.Sqlite;
+using StockSync.Models;
 
 public class DatabaseInitializer
 {
@@ -27,62 +28,65 @@ public class DatabaseInitializer
         using (var command = connection.CreateCommand())
         {
             command.CommandText = @"
-                CREATE TABLE IF NOT EXISTS source_inventory (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    product_name TEXT NOT NULL,
-                    quantity INTEGER NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS destination_inventory (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    product_name TEXT NOT NULL,
-                    quantity INTEGER NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS sync_history (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    synced_at TEXT NOT NULL,
+                CREATE TABLE IF NOT EXISTS attendees (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
                     status TEXT NOT NULL,
-                    details TEXT
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS print_jobs (
+                    id TEXT PRIMARY KEY,
+                    attendee_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    completed_at TEXT
+                );
+
+                CREATE TABLE IF NOT EXISTS webhook_events (
+                    event_id TEXT PRIMARY KEY,
+                    attendee_id TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    received_at TEXT NOT NULL
                 );
             ";
             command.ExecuteNonQuery();
         }
 
-        // Seed source_inventory if empty
+        // Seed default attendees if attendees table is empty
         using (var checkCmd = connection.CreateCommand())
         {
-            checkCmd.CommandText = "SELECT COUNT(*) FROM source_inventory;";
+            checkCmd.CommandText = "SELECT COUNT(*) FROM attendees;";
             var count = Convert.ToInt64(checkCmd.ExecuteScalar());
 
             if (count == 0)
             {
                 var now = DateTime.UtcNow.ToString("o");
-                var seedData = new (string Name, int Quantity)[]
+                var seedAttendees = new (string Id, string Name)[]
                 {
-                    ("Blue Shoes", 20),
-                    ("Black Shirt", 15),
-                    ("Red Cap", 8)
+                    ("A001", "Alice"),
+                    ("A002", "Brian"),
+                    ("A003", "Carol")
                 };
 
                 using var transaction = connection.BeginTransaction();
                 using var insertCmd = connection.CreateCommand();
                 insertCmd.Transaction = transaction;
                 insertCmd.CommandText = @"
-                    INSERT INTO source_inventory (product_name, quantity, updated_at)
-                    VALUES (@product_name, @quantity, @updated_at);
+                    INSERT INTO attendees (id, name, status, updated_at)
+                    VALUES (@id, @name, @status, @updated_at);
                 ";
 
-                var paramName = insertCmd.Parameters.Add("@product_name", SqliteType.Text);
-                var paramQty = insertCmd.Parameters.Add("@quantity", SqliteType.Integer);
+                var paramId = insertCmd.Parameters.Add("@id", SqliteType.Text);
+                var paramName = insertCmd.Parameters.Add("@name", SqliteType.Text);
+                var paramStatus = insertCmd.Parameters.Add("@status", SqliteType.Text);
                 var paramUpdated = insertCmd.Parameters.Add("@updated_at", SqliteType.Text);
 
-                foreach (var item in seedData)
+                foreach (var attendee in seedAttendees)
                 {
-                    paramName.Value = item.Name;
-                    paramQty.Value = item.Quantity;
+                    paramId.Value = attendee.Id;
+                    paramName.Value = attendee.Name;
+                    paramStatus.Value = AttendeeStatus.NotCheckedIn;
                     paramUpdated.Value = now;
                     insertCmd.ExecuteNonQuery();
                 }

@@ -1,0 +1,93 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solstice Events Co. - Check-in Kiosk</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="kiosk-container">
+        <!-- Header -->
+        <header class="kiosk-header">
+            <div class="brand">
+                <div class="logo-icon">🎟️</div>
+                <div>
+                    <h1>Solstice Events Co.</h1>
+                    <p class="subtitle">Self-Service Event Check-in Kiosk</p>
+                </div>
+            </div>
+            <div class="system-status">
+                <span class="status-indicator online"></span>
+                <span>Asynchronous Architecture (RabbitMQ + Webhook)</span>
+            </div>
+        </header>
+
+        <!-- Notification Banner -->
+        <div id="notification" class="notification hidden"></div>
+
+        <!-- Main Kiosk Panel: Attendees List -->
+        <main class="kiosk-main">
+            <section class="card">
+                <div class="card-header">
+                    <h2>Attendee Badge Scanner</h2>
+                    <span class="badge info">Scan attendee QR to initiate asynchronous printing</span>
+                </div>
+                <div class="attendee-grid" id="attendeeGrid">
+                    <!-- Dynamic Attendee Cards injected here -->
+                </div>
+            </section>
+
+            <!-- Verification & Live Demo Controls -->
+            <section class="card demo-section">
+                <div class="card-header">
+                    <h2>Meridian Pivot Demonstration & Testing Tools</h2>
+                    <button class="btn btn-secondary" onclick="resetSystem()">🔄 Reset All State</button>
+                </div>
+                <div class="demo-controls">
+                    <div class="demo-card">
+                        <h3>1. Duplicate Scan Protection</h3>
+                        <p>Attempts to scan an attendee who is already <code>CHECKED_IN</code> or <code>PENDING</code>. Verifies no second print job or RabbitMQ message is dispatched.</p>
+                        <div class="button-group">
+                            <button class="btn btn-warning" onclick="scanAttendee('A001')">Rescan Alice (A001)</button>
+                            <button class="btn btn-warning" onclick="scanAttendee('A002')">Rescan Brian (A002)</button>
+                        </div>
+                    </div>
+                    <div class="demo-card">
+                        <h3>2. Persistent Webhook Idempotency</h3>
+                        <p>Sends identical completion event ID (<code>evt-demo-duplicate-99</code>) twice to demonstrate persistent SQLite deduplication.</p>
+                        <div class="button-group">
+                            <button class="btn btn-info" onclick="testDuplicateWebhook()">Send Duplicate Webhook (2x)</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Real-time Print Jobs Audit Feed -->
+            <section class="card">
+                <div class="card-header">
+                    <h2>Print Jobs & Webhook Audit Log</h2>
+                    <span class="badge info" id="jobCount">0 Jobs</span>
+                </div>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Print Job ID</th>
+                                <th>Attendee</th>
+                                <th>Status</th>
+                                <th>Created At</th>
+                                <th>Completed At</th>
+                            </tr>
+                        </thead>
+                        <tbody id="printJobsTable">
+                            <tr><td colspan="5" class="empty-state">No print jobs yet. Scan an attendee to start.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
