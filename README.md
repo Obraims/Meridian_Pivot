@@ -1,87 +1,95 @@
-﻿# Solstice Events Co. - Event Check-in Kiosk
+# Solstice Events Co. - Event Check-in Kiosk
 
-A lightweight, reliable attendee check-in and asynchronous badge printing service built with **C# / ASP.NET Core Minimal API (.NET 10)**, **SQLite (ADO.NET)**, and **RabbitMQ**.
+A reliable attendee check-in and asynchronous badge printing service built with **C# / ASP.NET Core Minimal API (.NET 10)**, **SQLite (ADO.NET)**, and **RabbitMQ**.
 
 ---
 
-## Architecture Flow
+## 1. Project Context & The Pivot
+
+This project implements the **Solstice Events Co.** event check-in kiosk system adapted for the **Meridian Pivot**:
+
+- **Pre-Pivot (Day 3)**: Kiosk performed a synchronous REST call to the badge printer vendor, blocking until the hardware responded before marking the attendee as `CHECKED_IN`.
+- **Post-Pivot (Day 4/5)**: The vendor deprecated the synchronous API. The system now publishes a print request to a **RabbitMQ** queue (`badge-print-requests`), immediately sets attendee state to `PENDING`, and confirms `CHECKED_IN` only after receiving an asynchronous webhook callback (`POST /api/webhooks/print-completed`).
+
+---
+
+## 2. Architecture Flow
 
 ```
 Kiosk UI (Scan QR)
     │
     ▼
-POST /api/checkin/{attendeeId}  ──(State: PENDING)──> SQLite DB
+POST /api/checkin/{attendeeId}  ──(State: PENDING)──> SQLite DB (stocksync.db)
     │
     ▼
-RabbitMQ (badge-print-requests)
+RabbitMQ Queue (badge-print-requests on localhost:5672)
     │
     ▼
-Mock Badge Printer Worker (BackgroundService)
+Mock Badge Printer Worker (BackgroundService, 1s hardware delay)
     │
     ▼
 POST /api/webhooks/print-completed
     │
     ▼
-Webhook Idempotency (SQLite webhook_events) ──(State: CHECKED_IN)──> SQLite DB
+Persistent Idempotency (SQLite webhook_events) ──(State: CHECKED_IN)──> SQLite DB
 ```
 
 ---
 
-## Key Features
+## 3. Key Functionality & Integrity Rules
 
-1. **Asynchronous Badge Printing**: Check-in requests are queued to RabbitMQ immediately without blocking kiosk staff.
-2. **Duplicate-Scan Protection**: Attendees who are already `CHECKED_IN` or `PENDING` cannot generate duplicate print jobs or queue messages.
-3. **Persistent Webhook Idempotency**: Webhook events are recorded in SQLite (`webhook_events`) to safely ignore duplicate callbacks.
-4. **Self-Service Kiosk UI**: Plain HTML/CSS/JavaScript interface displaying real-time attendee states (`Ready to Check In` $\rightarrow$ `⏳ Printing...` $\rightarrow$ `✓ Checked In`).
+1. **At Least 3 Attendees Supported**: `A001` (Alice), `A002` (Brian), `A003` (Carol) seeded in SQLite.
+2. **Asynchronous Processing**: Scans return `200 OK` with `PENDING` status in $< 20\text{ms}$; hardware print delay is decoupled via RabbitMQ.
+3. **Duplicate-Scan Protection**: Scanning an attendee who is already `PENDING` or `CHECKED_IN` is rejected without creating additional print jobs or queue messages.
+4. **Persistent Webhook Idempotency**: Webhook events are logged to the `webhook_events` table; replayed or duplicate webhook callbacks are safely dropped.
+5. **No Fake Queue Abstraction**: Genuine AMQP communication via `RabbitMQ.Client 7.2.2`.
 
 ---
 
-## Deployment & Running Options
+## 4. How to Run the Project (Evaluation Guide)
 
-### Option 1: Local Development / Evaluation (Recommended for Live Demo)
+### Prerequisites
+- **.NET 10 SDK** (`dotnet --version` >= `10.0.x`)
+- **Docker Desktop** (for running RabbitMQ)
 
-#### Step 1: Start RabbitMQ Broker
+---
+
+### Step 1: Start the RabbitMQ Broker
+
+If running for the first time:
 ```powershell
 docker run -d --name meridian-rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
 ```
 
-#### Step 2: Run Automated Tests
+If the container already exists from a previous run:
 ```powershell
-cd tests
-dotnet test
-```
-
-#### Step 3: Launch ASP.NET Core Application
-```powershell
-cd backend
-dotnet run --urls="http://127.0.0.1:5000"
-```
-
-Open your browser at `http://127.0.0.1:5000/` to access the live Kiosk UI!
-
----
-
-### Option 2: Single-Command Containerized Deployment (`docker compose`)
-
-To run the entire system (RabbitMQ + Backend + SQLite + Frontend) in isolated Docker containers:
-
-```powershell
-docker compose up --build
-```
-- **Kiosk UI**: `http://localhost:5000/`
-- **RabbitMQ Management Portal**: `http://localhost:15672/` (Username: `guest`, Password: `guest`)
-
-To stop and remove containers:
-```powershell
-docker compose down
+docker start meridian-rabbitmq
 ```
 
 ---
 
-### Option 3: Standalone Binary Release (`dotnet publish`)
-
-To package a standalone executable for deployment without source files:
+### Step 2: Run Automated Tests
 ```powershell
-dotnet publish backend/StockSync.csproj -c Release -o ./publish
+dotnet test tests/StockSync.Tests.csproj
 ```
-Then run the generated `publish/StockSync.exe` (Windows) or `publish/StockSync` (Linux/macOS).
+*(Runs 9 focused unit and integration tests covering attendee scan, RabbitMQ publishing, webhook handling, duplicate scan prevention, and idempotency).*
+
+---
+
+### Step 3: Start the Backend & Kiosk UI
+```powershell
+dotnet run --project backend/StockSync.csproj --urls="http://127.0.0.1:5000"
+```
+
+Open your browser at:
+👉 **`http://127.0.0.1:5000/`** (or `http://localhost:5000/`)
+
+---
+
+### 5. Live Demonstration Guide
+
+1. **Initial State**: All 3 attendees (`A001 Alice`, `A002 Brian`, `A003 Carol`) display `Ready to Check In`.
+2. **First Scan**: Click **"Scan Badge"** on Alice. The UI immediately displays `⏳ Printing Badge... (PENDING)` while publishing to RabbitMQ.
+3. **Completion**: In ~1 second, the background worker completes simulated printing, dispatches the webhook callback, and Alice transitions to `✓ Checked In`.
+4. **Duplicate Scan**: Click **"Re-scan Badge"** on Alice. The system displays the `ALREADY CHECKED IN` warning with `NO NEW BADGE WAS PRINTED` and creates zero additional jobs.
+5. **Audit**: The audit table displays exactly one completed print job per attendee.
