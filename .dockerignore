@@ -1,0 +1,19 @@
+# flyctl launch added from .gitignore
+# .NET / C# build outputs
+**/bin
+**/obj
+**/*.user
+**/*.userosscache
+**/*.sln.docstates
+
+# Database runtime files
+**/database/*.db
+**/database/*.db-shm
+**/database/*.db-wal
+
+# IDE files
+**/.vscode
+**/.idea
+**/*.suo
+**/*.user
+fly.toml
