@@ -1,4 +1,4 @@
-﻿namespace StockSync.Services;
+namespace StockSync.Services;
 
 using System.Text;
 using System.Text.Json;
@@ -31,12 +31,30 @@ public class MockBadgePrinterWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var hostName = _configuration["RabbitMQ:Host"] ?? "localhost";
-        var port = int.TryParse(_configuration["RabbitMQ:Port"], out var p) ? p : 5672;
         var queueName = _configuration["RabbitMQ:QueueName"] ?? "badge-print-requests";
+        var amqpUrl = _configuration["RabbitMQ:Url"] ?? _configuration["CLOUDAMQP_URL"] ?? _configuration["RABBITMQ_URL"];
 
-        _logger.LogInformation("MockBadgePrinterWorker starting. Connecting to RabbitMQ at {Host}:{Port}, listening on queue '{Queue}'...",
-            hostName, port, queueName);
+        var factory = new ConnectionFactory();
+        if (!string.IsNullOrWhiteSpace(amqpUrl))
+        {
+            factory.Uri = new Uri(amqpUrl);
+        }
+        else
+        {
+            factory.HostName = _configuration["RabbitMQ:Host"] ?? "localhost";
+            factory.Port = int.TryParse(_configuration["RabbitMQ:Port"], out var p) ? p : 5672;
+            if (!string.IsNullOrWhiteSpace(_configuration["RabbitMQ:Username"]))
+            {
+                factory.UserName = _configuration["RabbitMQ:Username"];
+                factory.Password = _configuration["RabbitMQ:Password"] ?? string.Empty;
+            }
+            if (!string.IsNullOrWhiteSpace(_configuration["RabbitMQ:VirtualHost"]))
+            {
+                factory.VirtualHost = _configuration["RabbitMQ:VirtualHost"];
+            }
+        }
+
+        _logger.LogInformation("MockBadgePrinterWorker starting and connecting to RabbitMQ...");
 
         IConnection? connection = null;
         IChannel? channel = null;
@@ -46,11 +64,6 @@ public class MockBadgePrinterWorker : BackgroundService
         {
             try
             {
-                var factory = new ConnectionFactory
-                {
-                    HostName = hostName,
-                    Port = port
-                };
                 connection = await factory.CreateConnectionAsync(stoppingToken);
                 channel = await connection.CreateChannelAsync(cancellationToken: stoppingToken);
 
@@ -130,7 +143,6 @@ public class MockBadgePrinterWorker : BackgroundService
             cancellationToken: stoppingToken
         );
 
-        // Keep background service alive until application stops
         try
         {
             await Task.Delay(Timeout.Infinite, stoppingToken);

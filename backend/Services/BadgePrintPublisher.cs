@@ -1,4 +1,4 @@
-﻿namespace StockSync.Services;
+namespace StockSync.Services;
 
 using System.Text;
 using System.Text.Json;
@@ -9,29 +9,43 @@ using StockSync.Models;
 
 public class BadgePrintPublisher : IBadgePrintPublisher
 {
-    private readonly string _hostName;
-    private readonly int _port;
+    private readonly IConfiguration _configuration;
     private readonly string _queueName;
     private readonly ILogger<BadgePrintPublisher> _logger;
 
     public BadgePrintPublisher(IConfiguration configuration, ILogger<BadgePrintPublisher> logger)
     {
-        _hostName = configuration["RabbitMQ:Host"] ?? "localhost";
-        _port = int.TryParse(configuration["RabbitMQ:Port"], out var p) ? p : 5672;
-        _queueName = configuration["RabbitMQ:QueueName"] ?? "badge-print-requests";
+        _configuration = configuration;
+        _queueName = _configuration["RabbitMQ:QueueName"] ?? "badge-print-requests";
         _logger = logger;
     }
 
     public async Task PublishPrintRequestAsync(BadgePrintMessage message)
     {
-        var factory = new ConnectionFactory
-        {
-            HostName = _hostName,
-            Port = _port
-        };
+        var factory = new ConnectionFactory();
+        var amqpUrl = _configuration["RabbitMQ:Url"] ?? _configuration["CLOUDAMQP_URL"] ?? _configuration["RABBITMQ_URL"];
 
-        _logger.LogInformation("Connecting to RabbitMQ at {Host}:{Port} to publish print job {PrintJobId} for attendee {AttendeeId}",
-            _hostName, _port, message.PrintJobId, message.AttendeeId);
+        if (!string.IsNullOrWhiteSpace(amqpUrl))
+        {
+            factory.Uri = new Uri(amqpUrl);
+        }
+        else
+        {
+            factory.HostName = _configuration["RabbitMQ:Host"] ?? "localhost";
+            factory.Port = int.TryParse(_configuration["RabbitMQ:Port"], out var p) ? p : 5672;
+            if (!string.IsNullOrWhiteSpace(_configuration["RabbitMQ:Username"]))
+            {
+                factory.UserName = _configuration["RabbitMQ:Username"];
+                factory.Password = _configuration["RabbitMQ:Password"] ?? string.Empty;
+            }
+            if (!string.IsNullOrWhiteSpace(_configuration["RabbitMQ:VirtualHost"]))
+            {
+                factory.VirtualHost = _configuration["RabbitMQ:VirtualHost"];
+            }
+        }
+
+        _logger.LogInformation("Connecting to RabbitMQ to publish print job {PrintJobId} for attendee {AttendeeId}",
+            message.PrintJobId, message.AttendeeId);
 
         await using var connection = await factory.CreateConnectionAsync();
         await using var channel = await connection.CreateChannelAsync();
