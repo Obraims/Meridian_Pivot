@@ -6,8 +6,41 @@ using StockSync.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Database configuration
-var dbPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "database", "stocksync.db"));
+// Find frontend directory across all execution modes
+string FindFrontendDirectory()
+{
+    var candidates = new[]
+    {
+        Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "frontend")),
+        Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "frontend")),
+        Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", "frontend")),
+        Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "frontend")),
+        Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "frontend")),
+        Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "..", "frontend")),
+        "/frontend"
+    };
+
+    foreach (var dir in candidates)
+    {
+        if (Directory.Exists(dir) && File.Exists(Path.Combine(dir, "index.html")))
+        {
+            return dir;
+        }
+    }
+    return candidates[0];
+}
+
+var frontendPath = FindFrontendDirectory();
+
+// Find database directory across all execution modes
+string FindDatabasePath()
+{
+    var dbDir = Path.GetFullPath(Path.Combine(frontendPath, "..", "database"));
+    if (!Directory.Exists(dbDir)) Directory.CreateDirectory(dbDir);
+    return Path.Combine(dbDir, "stocksync.db");
+}
+
+var dbPath = FindDatabasePath();
 var connectionString = $"Data Source={dbPath}";
 
 // CORS
@@ -49,22 +82,31 @@ using (var scope = app.Services.CreateScope())
 }
 
 // Serve Static Frontend UI Files
-var frontendPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "frontend"));
 if (Directory.Exists(frontendPath))
 {
+    var fileProvider = new PhysicalFileProvider(frontendPath);
     app.UseDefaultFiles(new DefaultFilesOptions
     {
-        FileProvider = new PhysicalFileProvider(frontendPath)
+        FileProvider = fileProvider
     });
     app.UseStaticFiles(new StaticFileOptions
     {
-        FileProvider = new PhysicalFileProvider(frontendPath)
+        FileProvider = fileProvider
     });
 }
 
+// Root Endpoint: Serve Kiosk UI
+app.MapGet("/", () =>
+{
+    var indexPath = Path.Combine(frontendPath, "index.html");
+    return File.Exists(indexPath)
+        ? Results.File(indexPath, "text/html")
+        : Results.Ok(new { system = "Solstice Events Check-in Kiosk", status = "Healthy", version = "2.0-Asynchronous" });
+});
+
 // Health & System Info
-app.MapGet("/", () => Results.Ok(new { system = "Solstice Events Check-in Kiosk", status = "Healthy", version = "2.0-Asynchronous" }));
 app.MapGet("/health", () => Results.Ok(new { system = "Solstice Events Check-in Kiosk", status = "Healthy" }));
+app.MapGet("/api/health", () => Results.Ok(new { system = "Solstice Events Check-in Kiosk", status = "Healthy" }));
 
 // KIOSK API: Attendees List
 app.MapGet("/api/attendees", async (IAttendeeRepository repo) =>
