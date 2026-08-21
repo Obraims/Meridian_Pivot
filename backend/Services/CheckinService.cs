@@ -75,10 +75,7 @@ public class CheckinService : ICheckinService
             };
         }
 
-        // State Transition: NOT_CHECKED_IN -> PENDING
         var now = DateTime.UtcNow;
-        await _attendeeRepo.UpdateStatusAsync(attendee.Id, AttendeeStatus.Pending, now);
-
         var printJob = new PrintJob
         {
             Id = $"job-{Guid.NewGuid():N}",
@@ -86,16 +83,34 @@ public class CheckinService : ICheckinService
             Status = "pending",
             CreatedAt = now
         };
-        await _printJobRepo.CreateAsync(printJob);
 
-        // Publish asynchronous print request to RabbitMQ
-        var message = new BadgePrintMessage
+        // Try publishing to RabbitMQ FIRST to ensure broker is healthy before committing state change
+        try
         {
-            PrintJobId = printJob.Id,
-            AttendeeId = attendee.Id,
-            AttendeeName = attendee.Name
-        };
-        await _publisher.PublishPrintRequestAsync(message);
+            var message = new BadgePrintMessage
+            {
+                PrintJobId = printJob.Id,
+                AttendeeId = attendee.Id,
+                AttendeeName = attendee.Name
+            };
+            await _publisher.PublishPrintRequestAsync(message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to publish print request to RabbitMQ for attendee {Id}. Reverting state.", attendee.Id);
+            return new CheckinResult
+            {
+                Success = false,
+                Status = "BROKER_UNREACHABLE",
+                AttendeeId = attendee.Id,
+                AttendeeName = attendee.Name,
+                Message = $"RabbitMQ broker is currently unreachable at localhost:5672 ({ex.Message}). Please ensure RabbitMQ is running."
+            };
+        }
+
+        // Commit state transition: NOT_CHECKED_IN -> PENDING
+        await _attendeeRepo.UpdateStatusAsync(attendee.Id, AttendeeStatus.Pending, now);
+        await _printJobRepo.CreateAsync(printJob);
 
         _logger.LogInformation("Check-in initiated for {Id} ({Name}). State set to PENDING, print job {JobId} queued to RabbitMQ.",
             attendee.Id, attendee.Name, printJob.Id);

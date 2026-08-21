@@ -1,4 +1,4 @@
-﻿using Microsoft.Extensions.FileProviders;
+using Microsoft.Extensions.FileProviders;
 using StockSync.Data;
 using StockSync.Models;
 using StockSync.Repositories;
@@ -122,19 +122,85 @@ app.MapGet("/api/attendees/{id}", async (string id, IAttendeeRepository repo) =>
     return attendee != null ? Results.Ok(attendee) : Results.NotFound(new { message = $"Attendee '{id}' not found." });
 });
 
-// KIOSK API: Trigger Check-in Scan
+// KIOSK API: Trigger Check-in Scan (Path Param)
 app.MapPost("/api/checkin/{attendeeId}", async (string attendeeId, ICheckinService checkinService) =>
 {
     var result = await checkinService.ProcessCheckinAsync(attendeeId);
     if (!result.Success && result.Status == "NOT_FOUND")
     {
-        return Results.NotFound(result);
+        return Results.NotFound(new { error = result.Message, attendeeId, status = "NOT_FOUND" });
     }
     if (!result.Success && result.Status == "INVALID_ID")
     {
-        return Results.BadRequest(result);
+        return Results.BadRequest(new { error = result.Message, attendeeId, status = "INVALID_ID" });
     }
-    return Results.Ok(result);
+    if (result.Status == AttendeeStatus.CheckedIn)
+    {
+        return Results.Json(new
+        {
+            attendeeId = result.AttendeeId,
+            name = result.AttendeeName,
+            status = "ALREADY_CHECKED_IN",
+            message = result.Message
+        }, statusCode: 409);
+    }
+    return Results.Ok(new
+    {
+        attendeeId = result.AttendeeId,
+        name = result.AttendeeName,
+        status = result.Status,
+        message = result.Message,
+        printJobId = result.PrintJobId
+    });
+});
+
+// KIOSK API: Trigger Check-in Scan (JSON Body)
+app.MapPost("/api/checkin", async (CheckinRequestBody body, ICheckinService checkinService) =>
+{
+    var id = body?.AttendeeId ?? string.Empty;
+    var result = await checkinService.ProcessCheckinAsync(id);
+    if (!result.Success && result.Status == "NOT_FOUND")
+    {
+        return Results.NotFound(new { error = result.Message, attendeeId = id, status = "NOT_FOUND" });
+    }
+    if (!result.Success && result.Status == "INVALID_ID")
+    {
+        return Results.BadRequest(new { error = result.Message, attendeeId = id, status = "INVALID_ID" });
+    }
+    if (result.Status == AttendeeStatus.CheckedIn)
+    {
+        return Results.Json(new
+        {
+            attendeeId = result.AttendeeId,
+            name = result.AttendeeName,
+            status = "ALREADY_CHECKED_IN",
+            message = result.Message
+        }, statusCode: 409);
+    }
+    return Results.Ok(new
+    {
+        attendeeId = result.AttendeeId,
+        name = result.AttendeeName,
+        status = result.Status,
+        message = result.Message,
+        printJobId = result.PrintJobId
+    });
+});
+
+// KIOSK API: Check Status for Polling
+app.MapGet("/api/checkin/{attendeeId}/status", async (string attendeeId, IAttendeeRepository repo) =>
+{
+    var attendee = await repo.GetByIdAsync(attendeeId);
+    if (attendee == null)
+    {
+        return Results.NotFound(new { error = $"Attendee '{attendeeId}' not found." });
+    }
+    return Results.Ok(new
+    {
+        attendeeId = attendee.Id,
+        name = attendee.Name,
+        status = attendee.Status
+    });
 });
 
 // WEBHOOK CALLBACK: Mock Badge Printer Callback
@@ -165,4 +231,5 @@ app.MapPost("/api/reset", async (
 
 app.Run();
 
+public record CheckinRequestBody(string? AttendeeId);
 public partial class Program { }

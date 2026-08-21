@@ -4,90 +4,138 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Solstice Events Co. - Check-in Kiosk</title>
+    <!-- Google Fonts: Playfair Display for Serif Typography & Plus Jakarta Sans / JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=JetBrains+Mono:wght@400;500;600&family=Playfair+Display:ital,wght@0,600;0,700;0,800;1,600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="kiosk-container">
-        <!-- Header -->
-        <header class="kiosk-header">
-            <div class="brand">
-                <div class="logo-icon">🎟️</div>
-                <div>
-                    <h1>Solstice Events Co.</h1>
-                    <p class="subtitle">Self-Service Event Check-in Kiosk</p>
+    <div class="kiosk-layout">
+        <!-- Main Central Kiosk Scanner Card (Matches Provided Design) -->
+        <main class="kiosk-center-stage">
+            <header class="kiosk-top-badge">
+                <span class="sparkle">✦</span>
+                <span>Solstice Events Co. • Kiosk Terminal</span>
+            </header>
+
+            <div class="scanner-modal-card" id="scannerCard">
+                <!-- Status Pill (Top) -->
+                <div class="status-top-pill" id="cardTopPill">
+                    <span class="pill-dot" id="pillDot"></span>
+                    <span id="pillText">READY TO SCAN</span>
+                </div>
+
+                <!-- Center Icon -->
+                <div class="modal-icon-circle" id="modalIcon">
+                    <span id="iconSymbol">📷</span>
+                </div>
+
+                <!-- Subheading -->
+                <div class="modal-subheading" id="modalSubheading">SCAN QR BADGE</div>
+
+                <!-- Large Attendee Name (Serif) -->
+                <h1 class="modal-attendee-name" id="modalName">Attendee Name</h1>
+
+                <!-- Attendee ID Badge -->
+                <div class="modal-attendee-id" id="modalId">A000</div>
+
+                <!-- Descriptive Message -->
+                <p class="modal-description" id="modalDesc">
+                    Select an attendee from the directory to simulate scanning their badge QR code.
+                </p>
+
+                <!-- Action Button (Pill) -->
+                <div class="modal-action-wrapper" id="modalActionWrapper">
+                    <button class="modal-pill-btn" id="modalBtn" onclick="handleCenterAction()">SCAN BADGE</button>
+                </div>
+
+                <!-- Footer Footnote -->
+                <div class="modal-footer-note" id="modalFooterNote">
+                    RABBITMQ ASYNCHRONOUS CHECK-IN SYSTEM
                 </div>
             </div>
-            <div class="system-status">
-                <span class="status-indicator online"></span>
-                <span>Asynchronous Architecture (RabbitMQ + Webhook)</span>
-            </div>
-        </header>
+        </main>
 
-        <!-- Notification Banner -->
-        <div id="notification" class="notification hidden"></div>
-
-        <!-- Main Kiosk Panel: Attendees List -->
-        <main class="kiosk-main">
-            <section class="card">
-                <div class="card-header">
-                    <h2>Attendee Badge Scanner</h2>
-                    <span class="badge info">Scan attendee QR to initiate asynchronous printing</span>
+        <!-- Right Side Panel: Attendee Directory, Audit Log, and Testing Tools -->
+        <aside class="kiosk-side-panel">
+            <!-- Attendee Directory Section -->
+            <section class="side-card">
+                <div class="side-card-header">
+                    <div>
+                        <h2 class="side-title">Attendee Directory</h2>
+                        <p class="side-subtitle">Live check-in records</p>
+                    </div>
+                    <button class="btn-icon-reset" onclick="resetSystem()" title="Reset All Attendee States">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                        <span>Reset</span>
+                    </button>
                 </div>
-                <div class="attendee-grid" id="attendeeGrid">
-                    <!-- Dynamic Attendee Cards injected here -->
+
+                <div class="attendees-list" id="attendeesList">
+                    <!-- Injected dynamically by script.js -->
                 </div>
             </section>
 
             <!-- Verification & Live Demo Controls -->
-            <section class="card demo-section">
-                <div class="card-header">
-                    <h2>Meridian Pivot Demonstration & Testing Tools</h2>
-                    <button class="btn btn-secondary" onclick="resetSystem()">🔄 Reset All State</button>
+            <section class="side-card">
+                <div class="side-card-header">
+                    <div>
+                        <h2 class="side-title">Pivot Demonstration Tools</h2>
+                        <p class="side-subtitle">Evaluate asynchronous edge cases</p>
+                    </div>
                 </div>
-                <div class="demo-controls">
-                    <div class="demo-card">
-                        <h3>1. Duplicate Scan Protection</h3>
-                        <p>Attempts to scan an attendee who is already <code>CHECKED_IN</code> or <code>PENDING</code>. Verifies no second print job or RabbitMQ message is dispatched.</p>
-                        <div class="button-group">
-                            <button class="btn btn-warning" onclick="scanAttendee('A001')">Rescan Alice (A001)</button>
-                            <button class="btn btn-warning" onclick="scanAttendee('A002')">Rescan Brian (A002)</button>
+                <div class="demo-actions">
+                    <button class="btn-demo" onclick="triggerDuplicateDemo()">
+                        <span class="demo-icon">🛡️</span>
+                        <div class="demo-text">
+                            <strong>Test Duplicate Scan</strong>
+                            <span>Attempts rescan on checked-in attendee</span>
                         </div>
-                    </div>
-                    <div class="demo-card">
-                        <h3>2. Persistent Webhook Idempotency</h3>
-                        <p>Sends identical completion event ID (<code>evt-demo-duplicate-99</code>) twice to demonstrate persistent SQLite deduplication.</p>
-                        <div class="button-group">
-                            <button class="btn btn-info" onclick="testDuplicateWebhook()">Send Duplicate Webhook (2x)</button>
+                    </button>
+                    <button class="btn-demo" onclick="testDuplicateWebhook()">
+                        <span class="demo-icon">⚡</span>
+                        <div class="demo-text">
+                            <strong>Test Webhook Idempotency (2x)</strong>
+                            <span>Sends duplicate completion event ID</span>
                         </div>
-                    </div>
+                    </button>
                 </div>
             </section>
 
-            <!-- Real-time Print Jobs Audit Feed -->
-            <section class="card">
-                <div class="card-header">
-                    <h2>Print Jobs & Webhook Audit Log</h2>
-                    <span class="badge info" id="jobCount">0 Jobs</span>
+            <!-- Audit Log Table -->
+            <section class="side-card">
+                <div class="side-card-header">
+                    <div>
+                        <h2 class="side-title">RabbitMQ & Webhook Audit</h2>
+                        <span class="badge-count" id="auditCount">0 Jobs</span>
+                    </div>
                 </div>
-                <div class="table-container">
-                    <table class="data-table">
+                <div class="audit-table-wrapper">
+                    <table class="audit-table">
                         <thead>
                             <tr>
-                                <th>Print Job ID</th>
+                                <th>Job ID</th>
                                 <th>Attendee</th>
                                 <th>Status</th>
-                                <th>Created At</th>
-                                <th>Completed At</th>
+                                <th>Time</th>
                             </tr>
                         </thead>
-                        <tbody id="printJobsTable">
-                            <tr><td colspan="5" class="empty-state">No print jobs yet. Scan an attendee to start.</td></tr>
+                        <tbody id="auditTableBody">
+                            <tr><td colspan="4" class="empty-log">No jobs in queue yet.</td></tr>
                         </tbody>
                     </table>
                 </div>
             </section>
-        </main>
+        </aside>
     </div>
+
+    <!-- Toast Notification Container -->
+    <div id="toast" class="toast-banner hidden">
+        <span class="toast-icon" id="toastIcon">ℹ️</span>
+        <span class="toast-message" id="toastMsg">Ready</span>
+    </div>
+
     <script src="script.js"></script>
 </body>
 </html>
